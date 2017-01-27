@@ -22,9 +22,21 @@
 
 #pragma once
 
-namespace daw {
-	struct curl_wrapper {
+#include <curl/curl.h>
+#include <memory>
 
+namespace daw {
+	class curl_wrapper {
+		CURL * m_curl;
+	public:
+		curl_wrapper( );
+		~curl_wrapper( );
+		curl_wrapper( curl_wrapper const & ) = delete;
+		curl_wrapper( curl_wrapper && ) = default;
+		curl_wrapper & operator=( curl_wrapper const & ) = delete;
+		curl_wrapper & operator=( curl_wrapper && ) = default;
+
+		operator CURL *( );
 	};
 }    // namespace daw
 

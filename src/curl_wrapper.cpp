@@ -20,9 +20,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <curl/curl.h>
+
+#include <daw/daw_exception.h>
+
 #include "curl_wrapper.h"
 
 namespace daw {
+	namespace {
+		bool ensure_global_init( ) noexcept {
+			static bool const m_init = []( ) {
+				return curl_global_init( CURL_GLOBAL_DEFAULT );
+			}( ) == 0;
 
+			return m_init;
+		}
+
+		auto init_curl( ) {
+			daw::exception::daw_throw_on_false( ensure_global_init( ), "Could not initialize global cURL interface" );
+			return curl_easy_init( );
+		}
+	}
+
+	curl_wrapper::curl_wrapper( ): 
+		m_curl{ init_curl( ) } { }
+
+	curl_wrapper::~curl_wrapper( ) {
+		if( m_curl ) {
+			auto tmp = m_curl;
+			m_curl = nullptr;
+			curl_easy_cleanup( tmp );
+		}
+	}
+
+	curl_wrapper::operator CURL *( ) {
+		daw::exception::dbg_throw_on_null( m_curl, "Attempt to use null cURL" );
+		return m_curl;
+	}
+	
 }	// namespace daw
 
