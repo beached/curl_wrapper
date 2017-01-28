@@ -107,17 +107,20 @@ namespace daw {
 
 	namespace impl {
 		namespace {
-			size_t write_handler( void *ptr, size_t size, size_t nmemb, void *stream ) noexcept {
-				auto & str_result = *static_cast<std::string*>( ptr );
-				try {
-					str_result += std::string{ static_cast<char const *>(ptr), static_cast<size_t>(size * nmemb) };
-					return size*nmemb;
-				} catch( std::bad_alloc const & ) {
-					// Error while appending string and with strong exception guarantee
-					return 0;
-				} catch( std::length_error const & ) {
-					return 0;
+			size_t write_handler( void * data_ptr, size_t Size, size_t nmemb, void * result ) noexcept {
+				size_t const size = nmemb * Size;
+				if( size > 0 ) {
+					auto & str_result = *static_cast<std::string *>( result );
+					try {
+						str_result.append( static_cast<char const *>( data_ptr ), size );
+					} catch( std::bad_alloc const & ) {
+						// Error while appending string and with strong exception guarantee
+						return 0;
+					} catch( std::length_error const & ) {
+						return 0;
+					}
 				}
+				return size;
 			}
 
 		}	// namespace anonymous
