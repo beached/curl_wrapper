@@ -52,10 +52,13 @@ set( SOURCE_FILES
 	${SOURCE_FOLDER}/curl_wrapper.cpp
 )
 
-add_library( curl_wrapper_lib ${HEADER_FILES} ${SOURCE_FILES} )
-target_link_libraries( curl_wrapper_lib ${Boost_LIBRARIES} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
-add_dependencies( curl_wrapper_lib header_libraries_prj )
+add_library( curl_wrapper ${HEADER_FILES} ${SOURCE_FILES} )
+target_link_libraries( curl_wrapper ${Boost_LIBRARIES} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
+add_dependencies( curl_wrapper header_libraries_prj )
 
 add_executable( curl_wrapper_test_bin ${HEADER_FILES} ${TEST_FOLDER}/curl_wrapper_test.cpp )
-target_link_libraries( curl_wrapper_test_bin curl_wrapper_lib ${Boost_LIBRARIES} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
+target_link_libraries( curl_wrapper_test_bin curl_wrapper ${Boost_LIBRARIES} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
+
+install( TARGETS curl_wrapper DESTINATION lib )
+install( DIRECTORY ${HEADER_FOLDER}/ DESTINATION include/daw )
 
