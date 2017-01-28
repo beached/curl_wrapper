@@ -22,12 +22,19 @@
 
 #pragma once
 
+#include <boost/utility/string_view.hpp>
 #include <curl/curl.h>
 #include <memory>
+#include <unordered_map>
 
 namespace daw {
+	namespace impl {
+		class curl_headers;
+	}
+
 	class curl_wrapper {
 		CURL * m_curl;
+		std::unique_ptr<impl::curl_headers> m_headers;
 	public:
 		curl_wrapper( );
 		~curl_wrapper( );
@@ -37,7 +44,11 @@ namespace daw {
 		curl_wrapper & operator=( curl_wrapper && ) = default;
 
 		operator CURL *( );
-	};
+
+		void add_header( boost::string_view name, boost::string_view value );
+		
+		std::string get_string( boost::string_view url );
+	};	// curl_wrapper
 }    // namespace daw
 
 

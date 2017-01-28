@@ -27,7 +27,8 @@
 #include "curl_wrapper.h"
 
 int main( int, char** ) {
-
+	daw::curl_wrapper crl{ };
+	std::cout << crl.get_string( "https://www.google.ca/" );
 
 
 	return EXIT_SUCCESS;
