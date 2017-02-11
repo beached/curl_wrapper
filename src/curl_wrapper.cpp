@@ -123,6 +123,11 @@ namespace daw {
 				return size;
 			}
 
+			size_t header_handler( void *, size_t Size, size_t nmemb, void * ) noexcept {
+				size_t const size = nmemb * Size;
+				return size;
+			}
+
 		}	// namespace anonymous
 	}	// namespace impl
 		
@@ -136,6 +141,7 @@ namespace daw {
 		}
 		std::string result;
 		curl_easy_setopt( m_curl, CURLOPT_WRITEFUNCTION, impl::write_handler );
+		curl_easy_setopt( m_curl, CURLOPT_HEADERFUNCTION, impl::header_handler );
 		curl_easy_setopt( m_curl, CURLOPT_WRITEDATA, &result );
 		
 		auto const curl_result = curl_easy_perform( m_curl );
