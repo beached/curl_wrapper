@@ -146,9 +146,14 @@ namespace daw {
 		
 		auto const curl_result = curl_easy_perform( m_curl );
 		daw::exception::daw_throw_on_false<std::runtime_error>( CURLE_OK == curl_result, curl_easy_strerror( curl_result ) );
-
+		if( *m_headers ) {
+			// Cut out response headers
+			auto pos = result.find( "\r\n\r\n" );
+			if( pos != std::string::npos ) {
+				result = result.substr( pos + 4 );
+			}
+		}
 		return result;
 	}
-
 }	// namespace daw
 
