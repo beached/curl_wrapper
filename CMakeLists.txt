@@ -4,11 +4,9 @@ project( curl_wrapper_prj )
 
 include( ExternalProject )
 
-find_package( Boost 1.60.0 REQUIRED )
 find_package( CURL REQUIRED )
 
 enable_testing( )
-add_definitions( -DBOOST_ALL_NO_LIB ) 
 
 find_package( Threads REQUIRED )
 
@@ -42,11 +40,9 @@ set( TEST_FOLDER "tests" )
 include_directories( SYSTEM "${CMAKE_BINARY_DIR}/install/include" )
 include_directories( ${HEADER_FOLDER} )
 
-include_directories( SYSTEM ${Boost_INCLUDE_DIRS} )
 include_directories( SYSTEM ${CURL_INCLUDE_DIRS} )
 
 link_directories( "${CMAKE_BINARY_DIR}/install/lib" )
-link_directories( ${Boost_LIBRARY_DIRS} )
 
 set( HEADER_FILES
 	${HEADER_FOLDER}/curl_wrapper.h
@@ -57,11 +53,11 @@ set( SOURCE_FILES
 )
 
 add_library( curl_wrapper ${HEADER_FILES} ${SOURCE_FILES} )
-target_link_libraries( curl_wrapper ${Boost_LIBRARIES} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
+target_link_libraries( curl_wrapper ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
 add_dependencies( curl_wrapper header_libraries_prj )
 
 add_executable( curl_wrapper_test_bin ${HEADER_FILES} ${TEST_FOLDER}/curl_wrapper_test.cpp )
-target_link_libraries( curl_wrapper_test_bin curl_wrapper ${Boost_LIBRARIES} ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
+target_link_libraries( curl_wrapper_test_bin curl_wrapper ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
 
 install( TARGETS curl_wrapper DESTINATION lib )
 install( DIRECTORY ${HEADER_FOLDER}/ DESTINATION include/daw )

@@ -20,11 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <boost/utility/string_view.hpp>
 #include <curl/curl.h>
 #include <stdexcept>
 
 #include <daw/daw_exception.h>
+#include <daw/daw_string_view.h>
 
 #include <string>
 
@@ -60,7 +60,7 @@ namespace daw {
 			curl_headers & operator=( curl_headers const & ) = delete;
 			curl_headers & operator=( curl_headers && ) = default;
 
-			void add_header( boost::string_view name, boost::string_view value ) {
+			void add_header( daw::string_view name, daw::string_view value ) {
 				std::string const header = name.to_string( ) + ": " + value.to_string( );
 				m_values = curl_slist_append( m_values, header.data( ) );
 				daw::exception::dbg_throw_on_null( m_values, "curl_slist_append should always set list to non_null" );
@@ -101,7 +101,7 @@ namespace daw {
 		return m_curl;
 	}
 
-	void curl_wrapper::add_header( boost::string_view name, boost::string_view value ) {
+	void curl_wrapper::add_header( daw::string_view name, daw::string_view value ) {
 		m_headers->add_header( name, value );	
 	}
 
@@ -131,7 +131,7 @@ namespace daw {
 		}	// namespace anonymous
 	}	// namespace impl
 		
-	std::string curl_wrapper::get_string( boost::string_view url ) {
+	std::string curl_wrapper::get_string( daw::string_view url ) {
 		curl_easy_setopt( m_curl, CURLOPT_NOSIGNAL, 1 );
 		curl_easy_setopt( m_curl, CURLOPT_ACCEPT_ENCODING, "deflate" );
 		curl_easy_setopt( m_curl, CURLOPT_URL, url.data( ) );
