@@ -1,64 +1,60 @@
-cmake_minimum_required( VERSION 2.8.12 )
+cmake_minimum_required(VERSION 3.14)
+project(curl_wrapper
+        VERSION "0.1.0"
+        DESCRIPTION "Wraps Curl for C++"
+        HOMEPAGE_URL "https://github.com/beached/curl_wrapper"
+        LANGUAGES C CXX
+        )
 
-project( curl_wrapper_prj )
 
-include( ExternalProject )
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard whose features are requested.")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package( CURL REQUIRED )
+find_package(CURL REQUIRED)
+find_package(Threads REQUIRED)
 
-enable_testing( )
+set(HEADER_FILES
+        include/daw/curl_wrapper.h
+        )
 
-find_package( Threads REQUIRED )
+set(SOURCE_FILES
+        src/curl_wrapper.cpp
+        )
 
-if( ${CMAKE_CXX_COMPILER_ID} STREQUAL 'MSVC' )
-	add_compile_options( -D_WIN32_WINNT=0x0601 /std:c++latest ) 
-else( )
-	if( ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang" )
-		add_compile_options(-std=c++14 -march=native -pthread -Weverything -Wno-c++98-compat -Wno-covered-switch-default -Wno-padded -Wno-exit-time-destructors -Wno-c++98-compat-pedantic -Wno-unused-parameter -Wno-missing-noreturn -Wno-missing-prototypes -Wno-disabled-macro-expansion)
-		set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
-		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-	elseif( ${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" )
-		add_compile_options(-std=c++14 -march=native -pthread -Wall -Wno-deprecated-declarations)
-		set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
-		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-	endif( )
-endif( )
+include(GNUInstallDirs)
 
-externalproject_add(
-    header_libraries_prj
-    GIT_REPOSITORY "https://github.com/beached/header_libraries.git"
-    SOURCE_DIR "${CMAKE_BINARY_DIR}/dependencies/header_libraries"
-    GIT_TAG "master"
-    INSTALL_DIR "${CMAKE_BINARY_DIR}/install"
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
-)
+option(BUILD_SHARED_LIBS "Build shared library" ON)
 
-set( HEADER_FOLDER "include" )
-set( SOURCE_FOLDER "src" )
-set( TEST_FOLDER "tests" )
+add_library(curl_wrapper ${HEADER_FILES} ${SOURCE_FILES})
+add_library(daw::curl_wrapper ALIAS curl_wrapper)
 
-include_directories( SYSTEM "${CMAKE_BINARY_DIR}/install/include" )
-include_directories( ${HEADER_FOLDER} )
+target_link_libraries(curl_wrapper PUBLIC CURL::libcurl)
+target_include_directories( curl_wrapper PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+        PRIVATE src)
+target_compile_features(curl_wrapper PUBLIC cxx_std_17)
 
-include_directories( SYSTEM ${CURL_INCLUDE_DIRS} )
+install(TARGETS curl_wrapper
+        EXPORT curl_wrapper_Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-link_directories( "${CMAKE_BINARY_DIR}/install/lib" )
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-set( HEADER_FILES
-	${HEADER_FOLDER}/curl_wrapper.h
-)
+include(CMakePackageConfigHelpers)
 
-set( SOURCE_FILES
-	${SOURCE_FOLDER}/curl_wrapper.cpp
-)
+set_target_properties(curl_wrapper PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION 1)
 
-add_library( curl_wrapper ${HEADER_FILES} ${SOURCE_FILES} )
-target_link_libraries( curl_wrapper ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
-add_dependencies( curl_wrapper header_libraries_prj )
+set(libcurl_wrapper_INSTALL_CMAKEDIR "share/LibCurlWrapper/cmake"
+        CACHE STRING "Install location for generated CMake files.")
 
-add_executable( curl_wrapper_test_bin ${HEADER_FILES} ${TEST_FOLDER}/curl_wrapper_test.cpp )
-target_link_libraries( curl_wrapper_test_bin curl_wrapper ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
-
-install( TARGETS curl_wrapper DESTINATION lib )
-install( DIRECTORY ${HEADER_FOLDER}/ DESTINATION include/daw )
-
+option(DAW_ENABLE_TESTING "Build unit tests" OFF)
+if (DAW_ENABLE_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif ()

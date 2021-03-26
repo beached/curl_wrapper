@@ -1,39 +1,24 @@
-// The MIT License (MIT)
+// Copyright (c) Darrell Wright
 //
-// Copyright (c) 2017 Darrell Wright
+// Distributed under the Boost Software License, version 1.0. (see accompanying
+// file license or copy at http://www.boost.org/license_1_0.txt)
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files( the "Software" ), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// Official repository: https://github.com/beached/curl_wrapper
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
 
+#include "daw/curl_wrapper.h"
+
+#include <cstddef>
 #include <curl/curl.h>
+#include <memory>
 #include <stdexcept>
-
-#include <daw/daw_exception.h>
-#include <daw/daw_string_view.h>
-
 #include <string>
-
-#include "curl_wrapper.h"
+#include <string_view>
 
 namespace daw {
-	namespace impl {
+	namespace cw_details {
 		namespace {
-			bool ensure_global_init( ) noexcept {
+			[[nodiscard]] bool ensure_global_init( ) noexcept {
 				static bool const m_init = []( ) {
 					return curl_global_init( CURL_GLOBAL_DEFAULT );
 				}( ) == 0;
@@ -41,111 +26,125 @@ namespace daw {
 				return m_init;
 			}
 
-			auto init_curl( ) {
-				daw::exception::daw_throw_on_false( ensure_global_init( ), "Could not initialize global cURL interface" );
+			[[nodiscard]] auto init_curl( ) {
+				if( not ensure_global_init( ) ) {
+					throw std::runtime_error(
+					  "Could not initialize global cURL interface" );
+				}
 				return curl_easy_init( );
 			}
-		}	// namespace anonymous
+
+			struct curl_slist_deleter {
+				inline void operator( )( curl_slist *ptr ) const {
+					curl_slist_free_all( ptr );
+				}
+			};
+		} // namespace
 
 		class curl_headers {
-			curl_slist * m_values;
+			std::unique_ptr<curl_slist, curl_slist_deleter> m_values{ };
+
 		public:
+			curl_headers( ) = default;
 
-			curl_headers( ):
-				m_values{ nullptr } { }
+			void add_header( std::string_view name, std::string_view value ) {
+				auto header = std::string( );
+				header.reserve( name.size( ) + value.size( ) + 1 );
+				header.append( name.data( ), name.size( ) );
+				header += ':';
+				header.append( value.data( ), value.size( ) );
 
-			~curl_headers( );
-			curl_headers( curl_headers const & ) = delete;
-			curl_headers( curl_headers && ) = default;
-			curl_headers & operator=( curl_headers const & ) = delete;
-			curl_headers & operator=( curl_headers && ) = default;
+				if( auto p = curl_slist_append( m_values.get( ), header.data( ) );
+				    not m_values ) {
 
-			void add_header( daw::string_view name, daw::string_view value ) {
-				std::string const header = name.to_string( ) + ": " + value.to_string( );
-				m_values = curl_slist_append( m_values, header.data( ) );
-				daw::exception::dbg_throw_on_null( m_values, "curl_slist_append should always set list to non_null" );
+					if( not p ) {
+						throw std::runtime_error(
+						  "curl_slist_append should always set list to non_null" );
+					}
+					m_values.reset( p );
+				}
 			}
 
-			explicit operator bool( ) const {
-				return nullptr != m_values;
+			[[nodiscard]] explicit operator bool( ) const {
+				return m_values != nullptr;
 			}
 
-			curl_slist const * get( ) const {
-				return m_values;
+			[[nodiscard]] curl_slist const *get( ) const {
+				return m_values.get( );
 			}
 
-			curl_slist * get( ) {
-				return m_values;
+			[[nodiscard]] curl_slist *get( ) {
+				return m_values.get( );
 			}
-		};	// curl_headers
+		}; // curl_headers
 
-		curl_headers::~curl_headers( ) {
-			if( nullptr != m_values ) {
-				curl_slist_free_all( std::exchange( m_values, nullptr ) );
-			}
+		void curl_deleter::operator( )( CURL *ptr ) const {
+			curl_easy_cleanup( ptr );
 		}
-	}	// namespace anonymous
+	} // namespace cw_details
 
-	curl_wrapper::curl_wrapper( ): 
-		m_curl{ impl::init_curl( ) },
-		m_headers{ std::make_unique<impl::curl_headers>( ) } { }
-
-	curl_wrapper::~curl_wrapper( ) {
-		if( nullptr != m_curl ) {
-			curl_easy_cleanup( std::exchange( m_curl, nullptr ) );
-		}
-	}
+	curl_wrapper::curl_wrapper( )
+	  : m_curl{ cw_details::init_curl( ) }
+	  , m_headers{ std::make_unique<cw_details::curl_headers>( ) } {}
 
 	curl_wrapper::operator CURL *( ) {
-		daw::exception::dbg_throw_on_null( m_curl, "Attempt to use null cURL" );
-		return m_curl;
+		if( not m_curl ) {
+			throw std::runtime_error( "Attempt to use null cURL" );
+		}
+		return m_curl.get( );
 	}
 
-	void curl_wrapper::add_header( daw::string_view name, daw::string_view value ) {
-		m_headers->add_header( name, value );	
+	void curl_wrapper::add_header( std::string_view name,
+	                               std::string_view value ) {
+		m_headers->add_header( name, value );
 	}
 
-	namespace impl {
+	namespace cw_details {
 		namespace {
-			size_t write_handler( void * data_ptr, size_t Size, size_t nmemb, void * result ) noexcept {
-				size_t const size = nmemb * Size;
+			std::size_t write_handler( void *data_ptr, std::size_t Size,
+			                           std::size_t nmemb, void *result ) noexcept {
+				std::size_t const size = nmemb * Size;
 				if( size > 0 ) {
-					auto & str_result = *static_cast<std::string *>( result );
+					auto &str_result = *reinterpret_cast<std::string *>( result );
 					try {
-						str_result.append( static_cast<char const *>( data_ptr ), size );
+						str_result.append( reinterpret_cast<char const *>( data_ptr ),
+						                   size );
 					} catch( std::bad_alloc const & ) {
 						// Error while appending string and with strong exception guarantee
 						return 0;
-					} catch( std::length_error const & ) {
-						return 0;
-					}
+					} catch( std::length_error const & ) { return 0; }
 				}
 				return size;
 			}
 
-			size_t header_handler( void *, size_t Size, size_t nmemb, void * ) noexcept {
-				size_t const size = nmemb * Size;
+			std::size_t header_handler( void *, std::size_t Size, std::size_t nmemb,
+			                            void * ) noexcept {
+				std::size_t const size = nmemb * Size;
 				return size;
 			}
 
-		}	// namespace anonymous
-	}	// namespace impl
-		
-	std::string curl_wrapper::get_string( daw::string_view url ) {
-		curl_easy_setopt( m_curl, CURLOPT_NOSIGNAL, 1 );
-		curl_easy_setopt( m_curl, CURLOPT_ACCEPT_ENCODING, "deflate" );
-		curl_easy_setopt( m_curl, CURLOPT_URL, url.data( ) );
+		} // namespace
+	}   // namespace cw_details
+
+	std::string curl_wrapper::get_string( std::string_view url ) {
+		curl_easy_setopt( m_curl.get( ), CURLOPT_NOSIGNAL, 1 );
+		curl_easy_setopt( m_curl.get( ), CURLOPT_ACCEPT_ENCODING, "deflate" );
+		curl_easy_setopt( m_curl.get( ), CURLOPT_URL, url.data( ) );
 		if( *m_headers ) {
-			curl_easy_setopt( m_curl, CURLOPT_HEADER, true );
-			curl_easy_setopt( m_curl, CURLOPT_HTTPHEADER, m_headers->get( ) );
+			curl_easy_setopt( m_curl.get( ), CURLOPT_HEADER, true );
+			curl_easy_setopt( m_curl.get( ), CURLOPT_HTTPHEADER, m_headers->get( ) );
 		}
 		std::string result;
-		curl_easy_setopt( m_curl, CURLOPT_WRITEFUNCTION, impl::write_handler );
-		curl_easy_setopt( m_curl, CURLOPT_HEADERFUNCTION, impl::header_handler );
-		curl_easy_setopt( m_curl, CURLOPT_WRITEDATA, &result );
-		
-		auto const curl_result = curl_easy_perform( m_curl );
-		daw::exception::daw_throw_on_false<std::runtime_error>( CURLE_OK == curl_result, curl_easy_strerror( curl_result ) );
+		curl_easy_setopt( m_curl.get( ), CURLOPT_WRITEFUNCTION,
+		                  cw_details::write_handler );
+		curl_easy_setopt( m_curl.get( ), CURLOPT_HEADERFUNCTION,
+		                  cw_details::header_handler );
+		curl_easy_setopt( m_curl.get( ), CURLOPT_WRITEDATA, &result );
+
+		auto const curl_result = curl_easy_perform( m_curl.get( ) );
+		if( curl_result != CURLE_OK ) {
+			throw std::runtime_error( curl_easy_strerror( curl_result ) );
+		}
 		if( *m_headers ) {
 			// Cut out response headers
 			auto pos = result.find( "\r\n\r\n" );
@@ -155,5 +154,10 @@ namespace daw {
 		}
 		return result;
 	}
-}	// namespace daw
 
+	void curl_wrapper::reset( ) {
+		m_headers.reset( );
+	}
+
+	curl_wrapper::~curl_wrapper( ) = default;
+} // namespace daw
