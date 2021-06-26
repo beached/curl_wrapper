@@ -15,92 +15,112 @@
 #include <string>
 #include <string_view>
 
-namespace daw {
-	namespace cw_details {
-		namespace {
-			[[nodiscard]] bool ensure_global_init( ) noexcept {
-				static bool const m_init = []( ) {
-					return curl_global_init( CURL_GLOBAL_DEFAULT );
-				}( ) == 0;
+namespace daw::cw_details {
+	inline namespace {
+		[[nodiscard]] bool ensure_global_init( ) noexcept {
+			static bool const m_init = []( ) {
+				return curl_global_init( CURL_GLOBAL_DEFAULT );
+			}( ) == 0;
 
-				return m_init;
-			}
-
-			[[nodiscard]] auto init_curl( ) {
-				if( not ensure_global_init( ) ) {
-					throw std::runtime_error(
-					  "Could not initialize global cURL interface" );
-				}
-				return curl_easy_init( );
-			}
-
-			struct curl_slist_deleter {
-				inline void operator( )( curl_slist *ptr ) const {
-					curl_slist_free_all( ptr );
-				}
-			};
-		} // namespace
-
-		class curl_headers {
-			std::unique_ptr<curl_slist, curl_slist_deleter> m_values{ };
-
-		public:
-			curl_headers( ) = default;
-
-			void add_header( std::string_view name, std::string_view value ) {
-				auto header = std::string( );
-				header.reserve( name.size( ) + value.size( ) + 1 );
-				header.append( name.data( ), name.size( ) );
-				header += ':';
-				header.append( value.data( ), value.size( ) );
-
-				if( auto p = curl_slist_append( m_values.get( ), header.data( ) );
-				    not m_values ) {
-
-					if( not p ) {
-						throw std::runtime_error(
-						  "curl_slist_append should always set list to non_null" );
-					}
-					m_values.reset( p );
-				}
-			}
-
-			[[nodiscard]] explicit operator bool( ) const {
-				return m_values != nullptr;
-			}
-
-			[[nodiscard]] curl_slist const *get( ) const {
-				return m_values.get( );
-			}
-
-			[[nodiscard]] curl_slist *get( ) {
-				return m_values.get( );
-			}
-		}; // curl_headers
-
-		void curl_deleter::operator( )( CURL *ptr ) const {
-			curl_easy_cleanup( ptr );
+			return m_init;
 		}
-	} // namespace cw_details
+
+		[[nodiscard]] auto init_curl( ) {
+			if( not ensure_global_init( ) ) {
+				throw std::runtime_error(
+				  "Could not initialize global cURL interface" );
+			}
+			return curl_easy_init( );
+		}
+
+		struct curl_slist_deleter {
+			inline void operator( )( curl_slist *ptr ) const {
+				curl_slist_free_all( ptr );
+			}
+		};
+	} // namespace
+
+	class curl_headers {
+		std::unique_ptr<curl_slist, curl_slist_deleter> m_values{ };
+
+	public:
+		curl_headers( ) = default;
+
+		void add_header( std::string_view name, std::string_view value ) {
+			auto header = std::string( );
+			header.reserve( std::size( name ) + std::size( value ) + 1 );
+			header.append( std::data( name ), std::size( name ) );
+			header += ':';
+			header.append( value.data( ), value.size( ) );
+
+			if( auto p = curl_slist_append( m_values.get( ), header.data( ) );
+			    not m_values ) {
+
+				if( not p ) {
+					throw std::runtime_error(
+					  "curl_slist_append should always set list to non_null" );
+				}
+				m_values.reset( p );
+			}
+		}
+
+		void reset( ) {
+			m_values.reset( );
+		}
+
+		[[nodiscard]] explicit operator bool( ) const {
+			return m_values != nullptr;
+		}
+
+		[[nodiscard]] curl_slist const *get( ) const {
+			return m_values.get( );
+		}
+
+		[[nodiscard]] curl_slist *get( ) {
+			return m_values.get( );
+		}
+	}; // curl_headers
+
+	void curl_deleter::operator( )( CURL *ptr ) const {
+		curl_easy_cleanup( ptr );
+	}
+} // namespace daw::cw_details
+
+namespace daw {
+	struct curl_wrapper::impl_t {
+		cw_details::curl_headers headers{ };
+		std::string body{ };
+		std::unique_ptr<CURL, cw_details::curl_deleter> curl{
+		  cw_details::init_curl( ) };
+
+		inline impl_t( ) = default;
+
+		bool has_body = false;
+
+		void reset( ) {
+			headers.reset( );
+			body.clear( );
+			has_body = false;
+		}
+	};
 
 	curl_wrapper::curl_wrapper( )
-	  : m_curl{ cw_details::init_curl( ) }
-	  , m_headers{ std::make_unique<cw_details::curl_headers>( ) } {}
+	  : m_impl( std::make_unique<impl_t>( ) ) {}
 
 	curl_wrapper::operator CURL *( ) {
-		if( not m_curl ) {
+		if( not m_impl->curl ) {
 			throw std::runtime_error( "Attempt to use null cURL" );
 		}
-		return m_curl.get( );
+		return m_impl->curl.get( );
 	}
 
 	void curl_wrapper::add_header( std::string_view name,
 	                               std::string_view value ) {
-		m_headers->add_header( name, value );
+		m_impl->headers.add_header( name, value );
 	}
 
 	namespace cw_details {
-		namespace {
+		inline namespace {
 			std::size_t write_handler( void *data_ptr, std::size_t Size,
 			                           std::size_t nmemb, void *result ) noexcept {
 				std::size_t const size = nmemb * Size;
@@ -127,25 +147,30 @@ namespace daw {
 	}   // namespace cw_details
 
 	std::string curl_wrapper::get_string( std::string_view url ) {
-		curl_easy_setopt( m_curl.get( ), CURLOPT_NOSIGNAL, 1 );
-		curl_easy_setopt( m_curl.get( ), CURLOPT_ACCEPT_ENCODING, "deflate" );
-		curl_easy_setopt( m_curl.get( ), CURLOPT_URL, url.data( ) );
-		if( *m_headers ) {
-			curl_easy_setopt( m_curl.get( ), CURLOPT_HEADER, true );
-			curl_easy_setopt( m_curl.get( ), CURLOPT_HTTPHEADER, m_headers->get( ) );
+		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_NOSIGNAL, 1 );
+		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_ACCEPT_ENCODING, "deflate" );
+		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_URL, url.data( ) );
+		if( m_impl->headers ) {
+			curl_easy_setopt( m_impl->curl.get( ), CURLOPT_HEADER, true );
+			curl_easy_setopt( m_impl->curl.get( ), CURLOPT_HTTPHEADER,
+			                  m_impl->headers.get( ) );
 		}
 		std::string result;
-		curl_easy_setopt( m_curl.get( ), CURLOPT_WRITEFUNCTION,
+		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_WRITEFUNCTION,
 		                  cw_details::write_handler );
-		curl_easy_setopt( m_curl.get( ), CURLOPT_HEADERFUNCTION,
+		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_HEADERFUNCTION,
 		                  cw_details::header_handler );
-		curl_easy_setopt( m_curl.get( ), CURLOPT_WRITEDATA, &result );
+		if( m_impl->has_body ) {
+			curl_easy_setopt( m_impl->curl.get( ), CURLOPT_POSTFIELDS,
+			                  m_impl->body.c_str( ) );
+		}
+		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_WRITEDATA, &result );
 
-		auto const curl_result = curl_easy_perform( m_curl.get( ) );
+		auto const curl_result = curl_easy_perform( m_impl->curl.get( ) );
 		if( curl_result != CURLE_OK ) {
 			throw std::runtime_error( curl_easy_strerror( curl_result ) );
 		}
-		if( *m_headers ) {
+		if( m_impl->headers ) {
 			// Cut out response headers
 			auto pos = result.find( "\r\n\r\n" );
 			if( pos != std::string::npos ) {
@@ -156,7 +181,14 @@ namespace daw {
 	}
 
 	void curl_wrapper::reset( ) {
-		m_headers.reset( );
+		m_impl->reset( );
+		m_impl->curl.reset( cw_details::init_curl( ) );
+	}
+
+	void curl_wrapper::set_body( std::string_view value ) {
+		m_impl->body.clear( );
+		m_impl->body.assign( std::data( value ), std::size( value ) );
+		m_impl->has_body = true;
 	}
 
 	curl_wrapper::~curl_wrapper( ) = default;
