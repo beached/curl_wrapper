@@ -8,7 +8,6 @@
 
 #include "daw/curl_wrapper.h"
 
-#include <cstddef>
 #include <curl/curl.h>
 #include <memory>
 #include <stdexcept>
