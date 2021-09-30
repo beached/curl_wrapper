@@ -7,7 +7,7 @@ project(daw-curl-wrapper
         )
 
 
-find_package(CURL REQUIRED)
+find_package(CURL REQUIRED )
 find_package(Threads REQUIRED)
 
 set(HEADER_FILES

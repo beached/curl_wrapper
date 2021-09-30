@@ -5,20 +5,10 @@
   "dependencies": [
     {
       "name": "curl",
-      "default-features": false,
       "features": [
-        "winssl"
-      ],
-      "platform": "windows"
-    },
-    {
-      "name": "curl",
-      "default-features": false,
-      "features": [
-        "openssl"
-      ],
-      "platform": "!windows"
+        "ssl"
+      ]
     }
-  ]
+	]
 }
 
