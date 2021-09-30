@@ -7,10 +7,6 @@ project(curl_wrapper
         )
 
 
-set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard whose features are requested.")
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
 

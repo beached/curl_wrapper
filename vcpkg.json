@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "daw-curl-wrapper",
+  "version": "0.1.0",
+  "dependencies": [
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": [
+        "winssl"
+      ],
+      "platform": "windows"
+    },
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": [
+        "openssl"
+      ],
+      "platform": "!windows"
+    }
+  ]
+}
+
