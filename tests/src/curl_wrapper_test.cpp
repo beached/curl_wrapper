@@ -12,5 +12,6 @@
 
 int main( ) {
 	auto crl = daw::curl_wrapper( );
-	std::cout << crl.get_string( "https://www.google.ca/" );
+	crl.retrieve( "https://www.google.ca" );
+	std::cout << crl.get_body( ) << '\n';
 }

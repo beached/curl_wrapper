@@ -9,6 +9,7 @@
 #pragma once
 
 #include <curl/curl.h>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -30,13 +31,46 @@ namespace daw {
 		curl_wrapper( curl_wrapper && ) = default;
 		curl_wrapper &operator=( curl_wrapper && ) = default;
 
-    curl_wrapper( curl_wrapper const & ) = delete;
-    curl_wrapper &operator=( curl_wrapper const & ) = delete;
+		curl_wrapper( curl_wrapper const & ) = delete;
+		curl_wrapper &operator=( curl_wrapper const & ) = delete;
 
-		explicit operator CURL *( );
+		CURL *get_curl_ptr( );
+		CURL const *get_curl_ptr( ) const;
+
+		[[nodiscard]] inline explicit operator CURL *( ) {
+			return get_curl_ptr( );
+		}
+
+		[[nodiscard]] inline explicit operator CURL const *( ) const {
+			return get_curl_ptr( );
+		}
+
+		[[nodiscard]] inline bool is_valid( ) const {
+			return static_cast<bool>( get_curl_ptr( ) );
+		}
+
+		[[nodiscard]] inline explicit operator bool( ) const {
+			return static_cast<bool>( get_curl_ptr( ) );
+		}
+
 		void add_header( std::string_view name, std::string_view value );
 		void set_body( std::string_view value );
+
+		void visit_headers(
+		  std::function<void( std::string_view key, std::string_view value )> cb );
+
+		template<typename T>
+		CURLcode set_opt( CURLoption opt, T &&value ) {
+			return curl_easy_setopt( get_curl_ptr( ), opt,
+			                         ( std::forward<T>( value ) ) );
+		}
+
 		void reset( );
-		[[nodiscard]] std::string get_string( std::string_view url );
+
+		// Get full response from server, including headers
+		void retrieve( std::string_view url );
+
+		// Get only body from server
+		[[nodiscard]] std::string const &get_body( ) const;
 	}; // curl_wrapper
 } // namespace daw

@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.30)
 project(daw-curl-wrapper
-        VERSION "0.1.0"
+        VERSION "0.2.0"
         DESCRIPTION "Wraps Curl for C++"
         HOMEPAGE_URL "https://github.com/beached/curl_wrapper"
         LANGUAGES C CXX
@@ -10,19 +10,15 @@ project(daw-curl-wrapper
 find_package(CURL REQUIRED )
 find_package(Threads REQUIRED)
 
-set(HEADER_FILES
-        include/daw/curl_wrapper.h
-        )
-
-set(SOURCE_FILES
-        src/curl_wrapper.cpp
-        )
-
 include(GNUInstallDirs)
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
-add_library(${PROJECT_NAME} ${HEADER_FILES} ${SOURCE_FILES})
+add_library(${PROJECT_NAME})
+target_sources(${PROJECT_NAME}
+        PRIVATE
+        src/curl_wrapper.cpp
+)
 add_library(daw::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 add_library(daw::curl_wrapper ALIAS ${PROJECT_NAME})
 

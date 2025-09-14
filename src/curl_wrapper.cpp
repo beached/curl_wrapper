@@ -106,7 +106,14 @@ namespace daw {
 	curl_wrapper::curl_wrapper( )
 	  : m_impl( std::make_unique<impl_t>( ) ) {}
 
-	curl_wrapper::operator CURL *( ) {
+	CURL *curl_wrapper::get_curl_ptr( ) {
+		if( not m_impl->curl ) {
+			throw std::runtime_error( "Attempt to use null cURL" );
+		}
+		return m_impl->curl.get( );
+	}
+
+	CURL const *curl_wrapper::get_curl_ptr( ) const {
 		if( not m_impl->curl ) {
 			throw std::runtime_error( "Attempt to use null cURL" );
 		}
@@ -145,25 +152,42 @@ namespace daw {
 		} // namespace
 	}   // namespace cw_details
 
-	std::string curl_wrapper::get_string( std::string_view url ) {
-		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_NOSIGNAL, 1 );
-		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_ACCEPT_ENCODING, "deflate" );
-		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_URL, url.data( ) );
+	void curl_wrapper::reset( ) {
+		m_impl->reset( );
+		m_impl->curl.reset( cw_details::init_curl( ) );
+	}
+
+	void curl_wrapper::set_body( std::string_view value ) {
+		m_impl->body.clear( );
+		m_impl->body.assign( std::data( value ), std::size( value ) );
+		m_impl->has_body = true;
+	}
+
+	std::string const &curl_wrapper::get_body( ) const {
+		if( not m_impl->has_body ) {
+			throw std::runtime_error( "Attempt to retrieve empty body" );
+		}
+		return m_impl->body;
+	}
+
+	curl_wrapper::~curl_wrapper( ) = default;
+
+	void curl_wrapper::retrieve( std::string_view url ) {
+		set_opt( CURLOPT_NOSIGNAL, 1 );
+		set_opt( CURLOPT_ACCEPT_ENCODING, "deflate" );
+		set_opt( CURLOPT_URL, url.data( ) );
 		if( m_impl->headers ) {
-			curl_easy_setopt( m_impl->curl.get( ), CURLOPT_HEADER, true );
-			curl_easy_setopt( m_impl->curl.get( ), CURLOPT_HTTPHEADER,
-			                  m_impl->headers.get( ) );
+			set_opt( CURLOPT_HEADER, true );
+			set_opt( CURLOPT_HTTPHEADER, m_impl->headers.get( ) );
 		}
 		std::string result;
-		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_WRITEFUNCTION,
-		                  cw_details::write_handler );
-		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_HEADERFUNCTION,
-		                  cw_details::header_handler );
+		set_opt( CURLOPT_WRITEFUNCTION, cw_details::write_handler );
+		set_opt( CURLOPT_HEADERFUNCTION, cw_details::header_handler );
 		if( m_impl->has_body ) {
-			curl_easy_setopt( m_impl->curl.get( ), CURLOPT_POSTFIELDS,
-			                  m_impl->body.c_str( ) );
+			m_impl->has_body = false;
+			set_opt( CURLOPT_POSTFIELDS, m_impl->body.c_str( ) );
 		}
-		curl_easy_setopt( m_impl->curl.get( ), CURLOPT_WRITEDATA, &result );
+		set_opt( CURLOPT_WRITEDATA, &result );
 
 		auto const curl_result = curl_easy_perform( m_impl->curl.get( ) );
 		if( curl_result != CURLE_OK ) {
@@ -176,19 +200,12 @@ namespace daw {
 				result = result.substr( pos + 4 );
 			}
 		}
-		return result;
-	}
-
-	void curl_wrapper::reset( ) {
-		m_impl->reset( );
-		m_impl->curl.reset( cw_details::init_curl( ) );
-	}
-
-	void curl_wrapper::set_body( std::string_view value ) {
-		m_impl->body.clear( );
-		m_impl->body.assign( std::data( value ), std::size( value ) );
+		m_impl->body = result;
 		m_impl->has_body = true;
 	}
 
-	curl_wrapper::~curl_wrapper( ) = default;
+	void curl_wrapper::visit_headers(
+	  std::function<void( std::string_view key, std::string_view value )> cb ) {
+
+	}
 } // namespace daw
